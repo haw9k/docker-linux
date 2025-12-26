@@ -73,17 +73,20 @@ jobs:
       - name: Login to GHCR (podman)
         run: echo "${{ secrets.GITHUB_TOKEN }}" | podman login ghcr.io -u "${{ github.actor }}" --password-stdin
 
-      - name: Pull & run app (uses server Postgres)
+      - name: Pull & run app
         run: |
           set -e
           podman pull "${IMAGE}:${{ github.sha }}"
 
           podman rm -f usersapp 2>/dev/null || true
 
-          # контейнер слушает 8008, на хосте открываем порт из секрета
-          podman run -d --name usersapp --network host \
+          # Проброс: внешний порт 60080 → внутренний порт контейнера 8015
+          podman run -d --name usersapp \
+            -p 60080:8015 \  # ← КЛЮЧЕВОЕ: 60080 (из задания) → 8015 (из листка)
             -e DATABASE_URL="postgresql+psycopg://kubsu:kubsu@127.0.0.1:5432/kubsu" \
             -e ROOT_PATH="/${{ secrets.USERNAME }}" \
             "${IMAGE}:${{ github.sha }}"
 
           podman ps
+          
+      
