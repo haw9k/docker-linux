@@ -67,23 +67,34 @@ jobs:
             "${IMAGE}:test-${{ github.sha }}"
 
   deploy:
-    runs-on: self-hosted
+    runs-on: ubuntu-latest
     needs: test
     steps:
-      - name: Login to GHCR (podman)
-        run: echo "${{ secrets.GITHUB_TOKEN }}" | podman login ghcr.io -u "${{ github.actor }}" --password-stdin
+      - name: Install sshpass
+        run: sudo apt-get update && sudo apt-get install -y sshpass
 
-      - name: Pull & run app (uses server Postgres)
+      - name: Deploy via SSH (podman on server)
+        env:
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_PORT: ${{ secrets.SSH_PORT }}
+          SSH_USER: ${{ secrets.SSH_USER }}
+          SSH_PASSWORD: ${{ secrets.SSH_PASSWORD }}
+          USERNAME: ${{ secrets.USERNAME }}
         run: |
           set -e
-          podman pull "${IMAGE}:${{ github.sha }}"
+          sshpass -p "$SSH_PASSWORD" ssh -o StrictHostKeyChecking=no -p "$SSH_PORT" "$SSH_USER@$SSH_HOST" "
+            set -e
 
-          podman rm -f "usersapp-${{ secrets.USERNAME }}" 2>/dev/null || true
+            echo '${{ secrets.GITHUB_TOKEN }}' | podman login ghcr.io -u '${{ github.actor }}' --password-stdin
 
-          # контейнер слушает 8015 на host network
-          podman run -d --name "usersapp-${{ secrets.USERNAME }}" --network host \
-            -e DATABASE_URL="postgresql+psycopg://kubsu:kubsu@127.0.0.1:5432/kubsu" \
-            -e ROOT_PATH="/${{ secrets.USERNAME }}" \
-            "${IMAGE}:${{ github.sha }}"
+            podman pull '${IMAGE}:${{ github.sha }}'
 
-          podman ps
+            podman rm -f 'usersapp-$USERNAME' 2>/dev/null || true
+
+            podman run -d --name 'usersapp-$USERNAME' --network host \
+              -e DATABASE_URL='postgresql+psycopg://kubsu:kubsu@127.0.0.1:5432/kubsu' \
+              -e ROOT_PATH='/$USERNAME' \
+              '${IMAGE}:${{ github.sha }}'
+
+            podman ps
+          "
