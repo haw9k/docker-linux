@@ -23,14 +23,14 @@ jobs:
       - name: Build & push PROD image
         run: |
           set -e
-          docker build --target prod -t "${IMAGE}:${{ github.sha }}" .
-          docker push "${IMAGE}:${{ github.sha }}"
+          docker build --target prod -t "${{ env.IMAGE }}:${{ github.sha }}" .
+          docker push "${{ env.IMAGE }}:${{ github.sha }}"
 
       - name: Build & push TEST image
         run: |
           set -e
-          docker build --target test -t "${IMAGE}:test-${{ github.sha }}" .
-          docker push "${IMAGE}:test-${{ github.sha }}"
+          docker build --target test -t "${{ env.IMAGE }}:test-${{ github.sha }}" .
+          docker push "${{ env.IMAGE }}:test-${{ github.sha }}"
 
   test:
     runs-on: ubuntu-latest
@@ -56,7 +56,7 @@ jobs:
         run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
 
       - name: Pull TEST image
-        run: docker pull "${IMAGE}:test-${{ github.sha }}"
+        run: docker pull "${{ env.IMAGE }}:test-${{ github.sha }}"
 
       - name: Run tests inside built image
         run: |
@@ -64,7 +64,7 @@ jobs:
           docker run --rm --network host \
             -e DATABASE_URL="postgresql+psycopg://kubsu:kubsu@127.0.0.1:5432/kubsu" \
             -e ROOT_PATH="" \
-            "${IMAGE}:test-${{ github.sha }}"
+            "${{ env.IMAGE }}:test-${{ github.sha }}"
 
   deploy:
     runs-on: self-hosted
@@ -76,17 +76,15 @@ jobs:
       - name: Pull & run app
         run: |
           set -e
-          podman pull "${IMAGE}:${{ github.sha }}"
-
+          podman pull "${{ env.IMAGE }}:${{ github.sha }}"
+          
           podman rm -f usersapp 2>/dev/null || true
 
-          # Проброс: внешний порт 60080 → внутренний порт контейнера 8015
+          # Проброс портов: внешний 60080 → внутренний 8015
           podman run -d --name usersapp \
-            -p 60080:8015 \  # ← КЛЮЧЕВОЕ: 60080 (из задания) → 8015 (из листка)
+            -p 60080:8015 \
             -e DATABASE_URL="postgresql+psycopg://kubsu:kubsu@127.0.0.1:5432/kubsu" \
             -e ROOT_PATH="/${{ secrets.USERNAME }}" \
-            "${IMAGE}:${{ github.sha }}"
-
-          podman ps
+            "${{ env.IMAGE }}:${{ github.sha }}"
           
-      
+          podman ps
