@@ -67,7 +67,7 @@ jobs:
             "${{ env.IMAGE }}:test-${{ github.sha }}"
 
   deploy:
-    runs-on: self-hosted
+    runs-on: [self-hosted, server]
     needs: test
     steps:
       - name: Login to GHCR (podman)
@@ -76,15 +76,26 @@ jobs:
       - name: Pull & run app
         run: |
           set -e
-          podman pull "${{ env.IMAGE }}:${{ github.sha }}"
-          
-          podman rm -f usersapp 2>/dev/null || true
 
-          # Проброс портов: внешний 60080 → внутренний 8015
-          podman run -d --name usersapp \
+          podman pull "${{ env.IMAGE }}:${{ github.sha }}"
+
+          # сеть для app + db
+          podman network create usersnet 2>/dev/null || true
+
+          # postgres (для простоты каждый раз пересоздаём)
+          podman rm -f usersdb 2>/dev/null || true
+          podman run -d --name usersdb --network usersnet \
+            -e POSTGRES_USER=kubsu \
+            -e POSTGRES_PASSWORD=kubsu \
+            -e POSTGRES_DB=kubsu \
+            postgres:16-alpine
+
+          # app
+          podman rm -f usersapp 2>/dev/null || true
+          podman run -d --name usersapp --network usersnet \
             -p 60080:8015 \
-            -e DATABASE_URL="postgresql+psycopg://kubsu:kubsu@127.0.0.1:5432/kubsu" \
+            -e DATABASE_URL="postgresql+psycopg://kubsu:kubsu@usersdb:5432/kubsu" \
             -e ROOT_PATH="/${{ secrets.USERNAME }}" \
             "${{ env.IMAGE }}:${{ github.sha }}"
-          
+
           podman ps
