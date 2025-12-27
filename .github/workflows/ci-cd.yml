@@ -90,6 +90,12 @@ jobs:
             -e POSTGRES_DB=kubsu \
             postgres:16-alpine
 
+          # ЖДЁМ, пока Postgres реально готов принимать подключения
+          for i in $(seq 1 30); do
+            podman exec usersdb pg_isready -U kubsu -d kubsu && break
+            sleep 1
+          done
+
           # app
           podman rm -f usersapp 2>/dev/null || true
           podman run -d --name usersapp --network usersnet \
